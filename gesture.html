@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>STEM AI Gesture Robot</title>
+
+<!-- MediaPipe CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+<style>
+body{background:black;color:white;text-align:center;font-family:Arial;}
+video,canvas{border:2px solid cyan;border-radius:10px;}
+.container{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:15px;}
+button{padding:10px 20px;font-size:16px;}
+</style>
+</head>
+<body>
+
+<h2>🤖 STEM AI Gesture Robot</h2>
+<button onclick="start()">Start</button>
+<p id="status">Waiting...</p>
+
+<div class="container">
+<video id="video" width="320" height="240" autoplay playsinline></video>
+<canvas id="canvas" width="320" height="240"></canvas>
+</div>
+
+<script>
+
+let lastCmd="";
+let lastSentTime=0;
+
+const statusText=document.getElementById("status");
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+
+function start(){
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    statusText.innerText = "Camera not supported. Use HTTPS.";
+    return;
+  }
+
+  navigator.mediaDevices.getUserMedia({video:true})
+  .then(stream=>{
+    video.srcObject=stream;
+    initAI();
+  })
+  .catch(err=>{
+    statusText.innerText="Camera Permission Denied";
+  });
+}
+
+
+function initAI(){
+
+  const hands = new Hands({
+    locateFile: (file) => {
+      return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+    }
+  });
+
+  hands.setOptions({
+    maxNumHands:1,
+    modelComplexity:0,
+    minDetectionConfidence:0.6,
+    minTrackingConfidence:0.6
+  });
+
+  hands.onResults(onResults);
+
+  const camera = new Camera(video,{
+    onFrame: async ()=>{
+      await hands.send({image:video});
+    },
+    width:320,
+    height:240
+  });
+
+  camera.start();
+}
+
+function countFingers(lm){
+  let c=0;
+  if(lm[8].y<lm[6].y)c++;
+  if(lm[12].y<lm[10].y)c++;
+  if(lm[16].y<lm[14].y)c++;
+  if(lm[20].y<lm[18].y)c++;
+  return c;
+}
+
+function sendCommand(cmd){
+
+  const now=Date.now();
+  if(cmd===lastCmd && (now-lastSentTime)<200) return;
+
+  lastCmd=cmd;
+  lastSentTime=now;
+
+  fetch("/"+cmd)
+  .catch(()=>console.log("Error sending command"));
+}
+
+function onResults(res){
+
+  ctx.clearRect(0,0,320,240);
+  ctx.drawImage(res.image,0,0,320,240);
+
+  if(!res.multiHandLandmarks || res.multiHandLandmarks.length===0){
+    statusText.innerText="✋ STOP";
+    return;
+  }
+
+  const lm=res.multiHandLandmarks[0];
+
+  drawConnectors(ctx,lm,HAND_CONNECTIONS,{color:'#0f0'});
+  drawLandmarks(ctx,lm,{color:'#f00'});
+
+  const fingers=countFingers(lm);
+
+  if(fingers===1){
+    statusText.innerText="➡ RIGHT";
+    sendCommand("right");
+  }
+  else if(fingers===2){
+    statusText.innerText="⬅ LEFT";
+    sendCommand("left");
+  }
+  else if(fingers>=4){
+    statusText.innerText="⬆ FORWARD";
+    sendCommand("forward");
+  }
+  else{
+    statusText.innerText="✋ STOP";
+  }
+}
+
+</script>
+</body>
+</html>
