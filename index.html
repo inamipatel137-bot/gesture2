@@ -100,7 +100,8 @@ function sendCommand(cmd){
   lastCmd=cmd;
   lastSentTime=now;
 
-  fetch("http://192.168.1.45/" + cmd)
+  fetch("/" + cmd)
+
 
   .catch(()=>console.log("Error sending command"));
 }
@@ -142,4 +143,5 @@ function onResults(res){
 </script>
 </body>
 </html>
+
 
